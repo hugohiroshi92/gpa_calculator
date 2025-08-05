@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de GPA Interativa (Créditos ou Horas)</title>
+    <title>Calculadora de GPA com Análise IA e PDF</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- jsPDF Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -31,7 +34,6 @@
             vertical-align: middle;
             padding: 0.5rem;
         }
-        /* Estilo para radio buttons customizados */
         .radio-label {
             border: 1px solid #D1D5DB;
             padding: 0.5rem 1rem;
@@ -45,6 +47,18 @@
             color: #4338CA;
             font-weight: 600;
         }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4F46E5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -54,8 +68,8 @@
             
             <!-- Cabeçalho -->
             <div class="mb-6">
-                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Calculadora de GPA com Conversão Automática</h1>
-                <p class="text-gray-600 mt-2">Adicione suas disciplinas com as notas de 0.0 a 10.0. A conversão e o cálculo do GPA são automáticos.</p>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Calculadora de GPA com Conversão e PDF</h1>
+                <p class="text-gray-600 mt-2">Adicione suas disciplinas, calcule o GPA e gere um relatório completo em PDF.</p>
             </div>
 
             <!-- Seleção de Modo -->
@@ -96,10 +110,13 @@
                 </table>
             </div>
 
-            <!-- Botão para Adicionar Linha -->
-            <div class="mt-4">
-                <button id="add-row-btn" class="w-full sm:w-auto bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+            <!-- Botões de Ação -->
+            <div class="mt-4 flex flex-wrap gap-4">
+                <button id="add-row-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
                     + Adicionar Disciplina
+                </button>
+                <button id="pdf-btn" class="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">
+                    📄 Gerar Relatório PDF
                 </button>
             </div>
 
@@ -135,7 +152,10 @@
             const modeSelector = document.getElementById('mode-selector');
             const creditsHeader = document.getElementById('credits-header');
             const hoursExplanation = document.getElementById('hours-explanation');
+            const pdfBtn = document.getElementById('pdf-btn');
             const CONVERSION_RATE = 15; // 15 horas = 1 crédito
+
+            const { jsPDF } = window.jspdf;
 
             const gradePoints = { 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
             
@@ -259,8 +279,80 @@
                 calculateGPA();
             };
 
+            const generatePDF = () => {
+                const doc = new jsPDF();
+                const currentMode = document.querySelector('input[name="calculation_mode"]:checked').value;
+                const modeText = currentMode === 'credits' ? 'Créditos' : 'Horas';
+                
+                // Título
+                doc.setFontSize(18);
+                doc.text("Relatório de Desempenho Acadêmico (GPA)", 14, 22);
+                
+                // Subtítulo e informações
+                doc.setFontSize(11);
+                doc.setTextColor(100);
+                doc.text(Modo de Cálculo: ${modeText}, 14, 32);
+                doc.text(Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}, 14, 38);
+
+                // Resumo
+                const gpaFinal = document.getElementById('gpa-final').textContent;
+                const totalCreditos = document.getElementById('total-creditos').textContent;
+                const status = document.getElementById('status-value').textContent;
+                
+                doc.autoTable({
+                    startY: 45,
+                    head: [['GPA Final (4.0)', 'Total de Créditos', 'Status']],
+                    body: [[gpaFinal, totalCreditos, status]],
+                    theme: 'grid',
+                    headStyles: { fillColor: [79, 70, 229] } // Cor roxa do tema
+                });
+
+                // Tabela de Disciplinas
+                const tableData = [];
+                const tableHeaders = [
+                    'Disciplina', 
+                    creditsHeader.textContent, 
+                    'Nota (0-10)', 
+                    'Nota (A-F)', 
+                    'Pontos (0-4)', 
+                    'Pontos Ponderados'
+                ];
+
+                tbody.querySelectorAll('tr').forEach(tr => {
+                    const rowData = [];
+                    // Inputs
+                    rowData.push(tr.querySelectorAll('input')[0].value); // Disciplina
+                    rowData.push(tr.querySelectorAll('input')[1].value); // Créditos/Horas
+                    rowData.push(tr.querySelectorAll('input')[2].value); // Nota 0-10
+                    // Outputs
+                    rowData.push(tr.cells[3].textContent); // Nota A-F
+                    rowData.push(tr.cells[4].textContent); // Pontos
+                    rowData.push(tr.cells[5].textContent); // Pontos Ponderados
+                    
+                    // Adiciona a linha apenas se tiver um nome de disciplina
+                    if (rowData[0]) {
+                        tableData.push(rowData);
+                    }
+                });
+                
+                if (tableData.length > 0) {
+                     doc.autoTable({
+                        startY: doc.lastAutoTable.finalY + 10,
+                        head: [tableHeaders],
+                        body: tableData,
+                        theme: 'striped'
+                    });
+                } else {
+                    doc.text("Nenhuma disciplina foi adicionada para gerar a tabela.", 14, doc.lastAutoTable.finalY + 15);
+                }
+
+                // Salvar PDF
+                doc.save('relatorio_gpa.pdf');
+            };
+
             modeSelector.addEventListener('change', updateMode);
             addRowBtn.addEventListener('click', () => createRow());
+            pdfBtn.addEventListener('click', generatePDF);
 
             createRow('Ex: Fundamentals of programming 1', '4', '6.6');
             createRow('Ex: Systems Analysis and Design', '3', '9.3');
